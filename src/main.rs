@@ -197,7 +197,7 @@ fn qcommand_seq_check(seq: &str) -> Result<(), char>
 		let mut buf = [0u8; 4];
 		let cmd = ch.encode_utf8(&mut buf);
 
-		if !qcommand_resolve(cmd).is_some()
+		if qcommand_resolve(cmd).is_none()
 		{
 			return Err(ch);
 		}
@@ -212,7 +212,7 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 		cmd = &cmd[1..];
 		if let Err(ch) = qcommand_seq_check(cmd)
 		{
-			wprint!("Invalid quick command(s) in '{cmd}: {ch}");
+			wprint!("Invalid quick command(s) in '{cmd}': {ch}");
 			return Some(1);
 		}
 
