@@ -13,6 +13,13 @@ macro_rules! wprint {
 		println!("apt-wrapper: {}", format_args!($($tt)*))
 	};
 }
+macro_rules! quick_command_execute {
+	($f:expr; $([ $($item:expr),+ $(,)? ]),+ $(,)?) => {
+		$(
+			$f(|cmd| cmd $( .arg($item) )+ .status())?;
+		)+
+	};
+}
 
 const MAX_QCOMMAND_SIZE: usize = 5;
 const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
@@ -23,6 +30,14 @@ const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
 	"V" => QuickCommand {
 		description: "Version",
 		callback: qcmd_version
+	},
+	"U" => QuickCommand {
+		description: "Update and Upgrade",
+		callback: qcmd_fully_update
+	},
+	"C" => QuickCommand {
+		description: "Clean and Purge; then execute `U`",
+		callback: qcmd_fully_cleanup
 	}
 };
 const REPLACE_SEGMENT_TABLE: phf::Map<usize, phf::Map<&'static str, &'static str>> = phf_map! {
@@ -96,7 +111,6 @@ fn backend_get_binary() -> &'static str
 			{
 				continue;
 			};
-
 			if metadata.permissions().mode() & 0o111 != 0
 			{
 				return p;
@@ -275,10 +289,21 @@ fn qcmd_help() -> QuickCommandCallbackResult
 
 	Ok(QuickCommandAction::Exit(0))
 }
-
 fn qcmd_version() -> QuickCommandCallbackResult
 {
-	backend_execute_common_checked(|cmd| cmd.arg("--version").status())?;
+	quick_command_execute!(backend_execute_common_checked; ["--version"]);
+
+	Ok(QuickCommandAction::Exit(0))
+}
+fn qcmd_fully_update() -> QuickCommandCallbackResult
+{
+	quick_command_execute!(backend_execute_common_checked; ["update"], ["upgrade", "-y"]);
+
+	Ok(QuickCommandAction::Exit(0))
+}
+fn qcmd_fully_cleanup() -> QuickCommandCallbackResult
+{
+	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"], ["update"], ["upgrade", "-y"]);
 
 	Ok(QuickCommandAction::Exit(0))
 }
@@ -293,6 +318,7 @@ fn main()
 
 	if let Some(act) = args.peek()
 	{
+		// NOTE: Consider warning if necessary
 		if act.len() <= MAX_QCOMMAND_SIZE
 			&& let Some(code) = qcommand_execute_common(act)
 		{
