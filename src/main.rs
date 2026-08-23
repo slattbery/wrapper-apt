@@ -38,7 +38,7 @@ const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
 		callback: qcmd_fully_update
 	},
 	"C" => QuickCommand {
-		description: "Clean and Purge; then execute `U`",
+		description: "Clean and Purge",
 		callback: qcmd_fully_cleanup
 	}
 };
