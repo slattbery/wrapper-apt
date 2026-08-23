@@ -137,13 +137,13 @@ where
 
 	if ret.success()
 	{
-		return Ok(());
+		Ok(())
 	}
 	else
 	{
-		return Err(QuickCommandError::ExitedWithErrorCode(
+		Err(QuickCommandError::ExitedWithErrorCode(
 			ret.code().unwrap_or(1),
-		));
+		))
 	}
 }
 
