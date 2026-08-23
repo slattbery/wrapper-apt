@@ -82,7 +82,7 @@ impl std::fmt::Display for QuickCommandError
 	{
 		match self
 		{
-			Self::IoError(e) => write!(f, "Comamand exited with error: {e}"),
+			Self::IoError(e) => write!(f, "Command error: {e}"),
 			Self::ExitedWithErrorCode(code) => write!(f, "Command exited with error code: {code}"),
 		}
 	}
