@@ -10,7 +10,7 @@ use phf::phf_map;
 
 macro_rules! wprint {
 	($($tt:tt)*) => {
-		println!("apt-wrapper: {}", format_args!($($tt)*))
+		println!("{WRAPPER_TAG}: {}", format_args!($($tt)*))
 	};
 }
 macro_rules! quick_command_execute {
@@ -20,6 +20,8 @@ macro_rules! quick_command_execute {
 		)+
 	};
 }
+
+const WRAPPER_TAG: &'static str = "apt-wrapper: ";
 
 const MAX_QCOMMAND_SIZE: usize = 5;
 const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
@@ -268,6 +270,7 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 		wprint!(
 			"'{cmd}' is not a registered command; did you mean {hint}? use +{cmd} to run them in sequence."
 		);
+
 		return Some(1);
 	}
 }
@@ -303,7 +306,7 @@ fn qcmd_fully_update() -> QuickCommandCallbackResult
 }
 fn qcmd_fully_cleanup() -> QuickCommandCallbackResult
 {
-	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"], ["update"], ["upgrade", "-y"]);
+	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"]);
 
 	Ok(QuickCommandAction::Exit(0))
 }
