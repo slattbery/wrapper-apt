@@ -10,7 +10,7 @@ use phf::phf_map;
 
 macro_rules! wprint {
 	($($tt:tt)*) => {
-		println!("{WRAPPER_TAG}: {}", format_args!($($tt)*))
+		println!("{WRAPPER_TAG} {}", format_args!($($tt)*))
 	};
 }
 macro_rules! quick_command_execute {
