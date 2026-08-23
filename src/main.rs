@@ -63,9 +63,7 @@ type QuickCommandCallback = fn() -> QuickCommandCallbackResult;
 #[derive(Debug)]
 enum QuickCommandAction
 {
-	NoReturn,
 	Exit(i32),
-	Continue,
 }
 
 #[derive(Debug)]
@@ -159,16 +157,10 @@ fn qcommand_execute(cmd: &str, qcmd: &QuickCommand) -> Option<Result<i32, i32>>
 	{
 		Ok(act) => match act
 		{
-			QuickCommandAction::NoReturn =>
-			{
-				wprint!("{cmd}: command returned unexpectedly");
-				return Some(Err(1));
-			}
 			QuickCommandAction::Exit(code) =>
 			{
 				return Some(Ok(code));
 			}
-			QuickCommandAction::Continue => return None,
 		},
 		Err(e) =>
 		{
@@ -192,6 +184,8 @@ fn qcommand_execute(cmd: &str, qcmd: &QuickCommand) -> Option<Result<i32, i32>>
 }
 fn qcommand_seq_check(seq: &str) -> Result<(), char>
 {
+	// FIXME: qcommand_seq_check_req(seq: &str, f: F(&[&QuickCommand, ...])) -> ...
+
 	for ch in seq.chars()
 	{
 		let mut buf = [0u8; 4];
