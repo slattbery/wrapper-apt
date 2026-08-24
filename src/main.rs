@@ -8,7 +8,7 @@ use std::{
 
 use phf::phf_map;
 
-macro_rules! wprint {
+macro_rules! wprintln {
 	($($tt:tt)*) => {
 		println!("{WRAPPER_TAG}{}", format_args!($($tt)*))
 	};
@@ -38,7 +38,7 @@ const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
 		callback: qcmd_fully_update
 	},
 	"C" => QuickCommand {
-		description: "Clean and Purge",
+		description: "Auto Clean and Auto Purge",
 		callback: qcmd_fully_cleanup
 	}
 };
@@ -83,6 +83,13 @@ impl std::fmt::Display for QuickCommandError
 			Self::IoError(e) => write!(f, "Command error: {e}"),
 			Self::ExitedWithErrorCode(code) => write!(f, "Command exited with error code: {code}"),
 		}
+	}
+}
+impl From<std::io::Error> for QuickCommandError
+{
+	fn from(value: std::io::Error) -> Self
+	{
+		Self::IoError(value)
 	}
 }
 
@@ -168,12 +175,12 @@ fn qcommand_execute(cmd: &str, qcmd: &QuickCommand) -> Option<Result<i32, i32>>
 			{
 				QuickCommandError::IoError(e) =>
 				{
-					wprint!("{cmd}: {e}");
+					wprintln!("{cmd}: {e}");
 					e.raw_os_error().unwrap_or(1)
 				}
 				QuickCommandError::ExitedWithErrorCode(code) =>
 				{
-					wprint!("{cmd}: Exited with error code {code}");
+					wprintln!("{cmd}: Exited with error code {code}");
 					code
 				}
 			};
@@ -206,7 +213,7 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 		cmd = &cmd[1..];
 		if let Err(ch) = qcommand_seq_check(cmd)
 		{
-			wprint!("Invalid quick command(s) in '{cmd}': {ch}");
+			wprintln!("Invalid quick command(s) in '{cmd}': {ch}");
 			return Some(1);
 		}
 
@@ -261,7 +268,7 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 		}
 		hint.truncate(hint.len().saturating_sub(2));
 
-		wprint!(
+		wprintln!(
 			"'{cmd}' is not a registered command; did you mean {hint}? use +{cmd} to run them in sequence."
 		);
 
@@ -276,12 +283,18 @@ fn qcmd_help() -> QuickCommandCallbackResult
 	let stdout = std::io::stdout();
 	let mut guard = stdout.lock();
 
-	writeln!(guard, "Quick Commands").ok();
-	writeln!(guard).ok();
-
+	writeln!(guard, "[Quick Commands]")?;
 	for (cmd, qcmd) in &QUICK_COMMAND_TABLE
 	{
-		writeln!(guard, "{cmd}: {}", qcmd.description).ok();
+		writeln!(guard, "	{cmd}: {}", qcmd.description)?;
+	}
+
+	writeln!(guard)?;
+
+	writeln!(guard, "[Positional Replacements]")?;
+	for (idx, tab) in &REPLACE_SEGMENT_TABLE
+	{
+		writeln!(guard, "> Index {idx}");
 	}
 
 	Ok(QuickCommandAction::Exit(0))
@@ -334,7 +347,7 @@ fn main()
 			}))
 			.exec()
 	});
-	wprint!("{e}");
+	wprintln!("{e}");
 
 	std::process::exit(e.raw_os_error().unwrap_or(1));
 }
