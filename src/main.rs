@@ -236,7 +236,7 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 			}
 		}
 
-		return Some(0);
+		Some(0)
 	}
 	else
 	{
@@ -272,7 +272,7 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 			"'{cmd}' is not a registered command; did you mean {hint}? use +{cmd} to run them in sequence."
 		);
 
-		return Some(1);
+		Some(1)
 	}
 }
 
@@ -286,7 +286,7 @@ fn qcmd_help() -> QuickCommandCallbackResult
 	writeln!(guard, "[Quick Commands]")?;
 	for (cmd, qcmd) in &QUICK_COMMAND_TABLE
 	{
-		writeln!(guard, "	{cmd}: {}", qcmd.description)?;
+		writeln!(guard, "  {cmd}: {}", qcmd.description)?;
 	}
 
 	writeln!(guard)?;
@@ -294,7 +294,12 @@ fn qcmd_help() -> QuickCommandCallbackResult
 	writeln!(guard, "[Positional Replacements]")?;
 	for (idx, tab) in &REPLACE_SEGMENT_TABLE
 	{
-		writeln!(guard, "> Index {idx}");
+		writeln!(guard, "> Index {idx}")?;
+		for (alias, replacement) in tab
+		{
+			writeln!(guard, "  {alias} -> {replacement}")?;
+		}
+		writeln!(guard)?;
 	}
 
 	Ok(QuickCommandAction::Exit(0))
