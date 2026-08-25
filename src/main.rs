@@ -1,6 +1,7 @@
 use std::{
 	borrow::Cow,
 	ffi::OsStr,
+	io::Write,
 	os::unix::{fs::PermissionsExt, process::CommandExt},
 	process::{Command, ExitStatus, Stdio},
 	sync::OnceLock,
@@ -8,9 +9,14 @@ use std::{
 
 use phf::phf_map;
 
+macro_rules! wprint {
+	($($tt:tt)*) => {
+		print!("{WRAPPER_TAG}{}", format_args!($($tt)*))
+	};
+}
 macro_rules! wprintln {
 	($($tt:tt)*) => {
-		println!("{WRAPPER_TAG}{}", format_args!($($tt)*))
+		wprint!("{}\n", format_args!($($tt)*))
 	};
 }
 macro_rules! quick_command_execute {
@@ -154,6 +160,25 @@ where
 	}
 }
 
+fn qcommand_confirm(message: std::fmt::Arguments<'_>) -> std::io::Result<bool>
+{
+	wprint!("{message} - [Y/n]: ");
+	std::io::stdout().flush()?;
+
+	let choice = getch::Getch::new().getch().unwrap_or_default() as char;
+
+	print!("\r\x1b[2K");
+	std::io::stdout().flush()?;
+
+	if choice == 'Y' || choice == 'y'
+	{
+		Ok(true)
+	}
+	else
+	{
+		Ok(false)
+	}
+}
 fn qcommand_resolve(key: &str) -> Option<&QuickCommand>
 {
 	QUICK_COMMAND_TABLE.get(key)
@@ -217,6 +242,15 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 			return Some(1);
 		}
 
+		let Ok(true) = qcommand_confirm(format_args!(
+			"do you want execute sequence command(s) `{cmd}`?"
+		))
+		else
+		{
+			wprintln!("Aborted");
+			return Some(0);
+		};
+
 		for ch in cmd.chars()
 		{
 			let mut buf = [0u8; 4];
@@ -242,6 +276,13 @@ fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
 	{
 		if let Some(qcmd) = qcommand_resolve(cmd)
 		{
+			let Ok(true) = qcommand_confirm(format_args!("do you want execute command `{cmd}`?"))
+			else
+			{
+				wprintln!("Aborted");
+				return Some(0);
+			};
+
 			return match qcommand_execute(cmd, qcmd)
 			{
 				Some(Ok(it)) => Some(it),
