@@ -7,6 +7,9 @@ edition = "2024"
 getch = "0.3.1"
 phf = { version = "0.14.0", features = ["macros"] }
 
+[features]
+confirmation = []
+
 [profile.release]
 opt-level = 3
 debug = "none"

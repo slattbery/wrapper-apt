@@ -1,7 +1,8 @@
+#[cfg(not(feature = "confirmation"))]
+use std::hint::black_box;
 use std::{
 	borrow::Cow,
 	ffi::OsStr,
-	io::Write,
 	os::unix::{fs::PermissionsExt, process::CommandExt},
 	process::{Command, ExitStatus, Stdio},
 	sync::OnceLock,
@@ -162,21 +163,32 @@ where
 
 fn qcommand_confirm(message: std::fmt::Arguments<'_>) -> std::io::Result<bool>
 {
-	wprint!("{message} - [Y/n]: ");
-	std::io::stdout().flush()?;
-
-	let choice = getch::Getch::new().getch().unwrap_or_default() as char;
-
-	print!("\r\x1b[2K");
-	std::io::stdout().flush()?;
-
-	if choice == 'Y' || choice == 'y'
+	#[cfg(not(feature = "confirmation"))]
 	{
-		Ok(true)
+		black_box(message);
+		return Ok(true);
 	}
-	else
+
+	#[cfg(feature = "confirmation")]
 	{
-		Ok(false)
+		use std::io::Write;
+
+		wprint!("{message} - [Y/n]: ");
+		std::io::stdout().flush()?;
+
+		let choice = getch::Getch::new().getch().unwrap_or_default() as char;
+
+		print!("\r\x1b[2K");
+		std::io::stdout().flush()?;
+
+		if choice == 'Y' || choice == 'y'
+		{
+			Ok(true)
+		}
+		else
+		{
+			Ok(false)
+		}
 	}
 }
 fn qcommand_resolve(key: &str) -> Option<&QuickCommand>
