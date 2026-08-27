@@ -32,7 +32,7 @@ const WRAPPER_TAG: &'static str = "apt-wrapper: ";
 
 const MAX_QCOMMAND_SIZE: usize = 5;
 const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
-	"H" => QuickCommand {
+	"HELP" => QuickCommand {
 		description: "Help",
 		callback: qcmd_help
 	},
@@ -47,6 +47,10 @@ const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
 	"C" => QuickCommand {
 		description: "Auto Clean and Auto Purge",
 		callback: qcmd_fully_cleanup
+	},
+	"S" => QuickCommand {
+		description: "Execute C, then U",
+		callback: qcmd_sync
 	}
 };
 const REPLACE_SEGMENT_TABLE: phf::Map<usize, phf::Map<&'static str, &'static str>> = phf_map! {
@@ -372,6 +376,12 @@ fn qcmd_fully_update() -> QuickCommandCallbackResult
 fn qcmd_fully_cleanup() -> QuickCommandCallbackResult
 {
 	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"]);
+
+	Ok(QuickCommandAction::Exit(0))
+}
+fn qcmd_sync() -> QuickCommandCallbackResult
+{
+	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"], ["update"], ["upgrade", "-y"]);
 
 	Ok(QuickCommandAction::Exit(0))
 }
