@@ -27,6 +27,13 @@ macro_rules! quick_command_execute {
 		)+
 	};
 }
+macro_rules! quick_command_execute_install {
+	($f:expr; [ $($item:expr),+ $(,)? ]) => {
+		$(
+			$f(|cmd| cmd.arg("install").arg($item).arg("-y").status())?;
+		)+
+	};
+}
 
 const WRAPPER_TAG: &'static str = "apt-wrapper: ";
 
@@ -35,6 +42,10 @@ const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
 	"HELP" => QuickCommand {
 		description: "Help",
 		callback: qcmd_help
+	},
+	"SETUP" => QuickCommand {
+		description: "Basic Setup",
+		callback: qcmd_setup
 	},
 	"V" => QuickCommand {
 		description: "Version",
@@ -358,6 +369,12 @@ fn qcmd_help() -> QuickCommandCallbackResult
 		}
 		writeln!(guard)?;
 	}
+
+	Ok(QuickCommandAction::Exit(0))
+}
+fn qcmd_setup() -> QuickCommandCallbackResult
+{
+	quick_command_execute_install!(backend_execute_common_checked; ["openssh", "busybox"]);
 
 	Ok(QuickCommandAction::Exit(0))
 }
