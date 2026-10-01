@@ -1,11 +1,11 @@
 #[cfg(not(feature = "confirmation"))]
 use std::hint::black_box;
 use std::{
-	borrow::Cow,
-	ffi::OsStr,
-	os::unix::{fs::PermissionsExt, process::CommandExt},
-	process::{Command, ExitStatus, Stdio},
-	sync::OnceLock,
+  borrow::Cow,
+  ffi::OsStr,
+  os::unix::{fs::PermissionsExt, process::CommandExt},
+  process::{Command, ExitStatus, Stdio},
+  sync::OnceLock,
 };
 
 use phf::phf_map;
@@ -39,400 +39,344 @@ const WRAPPER_TAG: &'static str = "apt-wrapper: ";
 
 const MAX_QCOMMAND_SIZE: usize = 5;
 const QUICK_COMMAND_TABLE: phf::Map<&'static str, QuickCommand> = phf_map! {
-	"HELP" => QuickCommand {
-		description: "Help",
-		callback: qcmd_help
-	},
-	"SETUP" => QuickCommand {
-		description: "Basic Setup",
-		callback: qcmd_setup
-	},
-	"V" => QuickCommand {
-		description: "Version",
-		callback: qcmd_version
-	},
-	"U" => QuickCommand {
-		description: "Update and Upgrade",
-		callback: qcmd_fully_update
-	},
-	"C" => QuickCommand {
-		description: "Auto Clean and Auto Purge",
-		callback: qcmd_fully_cleanup
-	},
-	"S" => QuickCommand {
-		description: "Execute C, then U",
-		callback: qcmd_sync
-	}
+  "HELP" => QuickCommand {
+    description: "Help",
+    callback: qcmd_help
+  },
+  "SETUP" => QuickCommand {
+    description: "Basic Setup",
+    callback: qcmd_setup
+  },
+  "V" => QuickCommand {
+    description: "Version",
+    callback: qcmd_version
+  },
+  "U" => QuickCommand {
+    description: "Update and Upgrade",
+    callback: qcmd_fully_update
+  },
+  "C" => QuickCommand {
+    description: "Auto Clean and Auto Purge",
+    callback: qcmd_fully_cleanup
+  },
+  "S" => QuickCommand {
+    description: "Execute C, then U",
+    callback: qcmd_sync
+  }
 };
 const REPLACE_SEGMENT_TABLE: phf::Map<usize, phf::Map<&'static str, &'static str>> = phf_map! {
-	0usize => phf_map! {
-		"i" => "install",
-		"r" => "remove",
-		"ri" => "reinstall",
-		"s" => "search",
-		"u" => "update",
-		"ug" => "upgrade",
-		"p" => "purge",
-		"c" => "clean",
-		"ac" => "autoclean",
-		"ap" => "autopurge",
-	}
+  0usize => phf_map! {
+    "i" => "install",
+    "r" => "remove",
+    "ri" => "reinstall",
+    "s" => "search",
+    "u" => "update",
+    "ug" => "upgrade",
+    "p" => "purge",
+    "c" => "clean",
+    "ac" => "autoclean",
+    "ap" => "autopurge",
+  }
 };
 
 type QuickCommandCallbackResult = Result<QuickCommandAction, QuickCommandError>;
 type QuickCommandCallback = fn() -> QuickCommandCallbackResult;
 
 #[derive(Debug)]
-enum QuickCommandAction
-{
-	Exit(i32),
+enum QuickCommandAction {
+  Exit(i32),
 }
 
 #[derive(Debug)]
-enum QuickCommandError
-{
-	IoError(std::io::Error),
-	ExitedWithErrorCode(i32),
+enum QuickCommandError {
+  IoError(std::io::Error),
+  ExitedWithErrorCode(i32),
 }
 
 impl std::error::Error for QuickCommandError {}
-impl std::fmt::Display for QuickCommandError
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-	{
-		match self
-		{
-			Self::IoError(e) => write!(f, "Command error: {e}"),
-			Self::ExitedWithErrorCode(code) => write!(f, "Command exited with error code: {code}"),
-		}
-	}
+impl std::fmt::Display for QuickCommandError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::IoError(e) => write!(f, "Command error: {e}"),
+      Self::ExitedWithErrorCode(code) => write!(f, "Command exited with error code: {code}"),
+    }
+  }
 }
-impl From<std::io::Error> for QuickCommandError
-{
-	fn from(value: std::io::Error) -> Self
-	{
-		Self::IoError(value)
-	}
+impl From<std::io::Error> for QuickCommandError {
+  fn from(value: std::io::Error) -> Self {
+    Self::IoError(value)
+  }
 }
 
-struct QuickCommand
-{
-	description: &'static str,
-	callback: QuickCommandCallback,
+struct QuickCommand {
+  description: &'static str,
+  callback: QuickCommandCallback,
 }
 
-fn backend_get_binary() -> &'static str
-{
-	static BINARY: OnceLock<&'static str> = OnceLock::new();
+fn backend_get_binary() -> &'static str {
+  static BINARY: OnceLock<&'static str> = OnceLock::new();
 
-	const BINARY_PATHS: &[&'static str] = &[
-		"/usr/bin/apt",
-		"/sbin/apt",
-		"/usr/sbin/apt",
-		"/data/data/com.termux/files/usr/bin/apt",
-	];
+  const BINARY_PATHS: &[&'static str] = &[
+    "/usr/bin/apt",
+    "/sbin/apt",
+    "/usr/sbin/apt",
+    "/data/data/com.termux/files/usr/bin/apt",
+  ];
 
-	BINARY.get_or_init(|| {
-		for p in BINARY_PATHS
-		{
-			let Ok(metadata) = std::fs::metadata(p)
-			else
-			{
-				continue;
-			};
-			if metadata.permissions().mode() & 0o111 != 0
-			{
-				return p;
-			}
-		}
+  BINARY.get_or_init(|| {
+    for p in BINARY_PATHS {
+      let Ok(metadata) = std::fs::metadata(p)
+      else {
+        continue;
+      };
+      if metadata.permissions().mode() & 0o111 != 0 {
+        return p;
+      }
+    }
 
-		return BINARY_PATHS[0];
-	})
+    return BINARY_PATHS[0];
+  })
 }
 fn backend_execute_common<F, R>(f: F) -> R
 where
-	F: FnOnce(&mut Command) -> R,
+  F: FnOnce(&mut Command) -> R,
 {
-	f(Command::new(backend_get_binary())
-		.stdin(Stdio::inherit())
-		.stdout(Stdio::inherit())
-		.stderr(Stdio::inherit()))
+  f(Command::new(backend_get_binary())
+    .stdin(Stdio::inherit())
+    .stdout(Stdio::inherit())
+    .stderr(Stdio::inherit()))
 }
 fn backend_execute_common_checked<F>(f: F) -> Result<(), QuickCommandError>
 where
-	F: FnOnce(&mut Command) -> std::io::Result<ExitStatus>,
+  F: FnOnce(&mut Command) -> std::io::Result<ExitStatus>,
 {
-	let ret = backend_execute_common(f).map_err(|e| QuickCommandError::IoError(e))?;
+  let ret = backend_execute_common(f).map_err(|e| QuickCommandError::IoError(e))?;
 
-	if ret.success()
-	{
-		Ok(())
-	}
-	else
-	{
-		Err(QuickCommandError::ExitedWithErrorCode(
-			ret.code().unwrap_or(1),
-		))
-	}
+  if ret.success() {
+    Ok(())
+  }
+  else {
+    Err(QuickCommandError::ExitedWithErrorCode(
+      ret.code().unwrap_or(1),
+    ))
+  }
 }
 
-fn qcommand_confirm(message: std::fmt::Arguments<'_>) -> std::io::Result<bool>
-{
-	#[cfg(not(feature = "confirmation"))]
-	{
-		black_box(message);
-		return Ok(true);
-	}
+fn qcommand_confirm(message: std::fmt::Arguments<'_>) -> std::io::Result<bool> {
+  #[cfg(not(feature = "confirmation"))]
+  {
+    black_box(message);
+    return Ok(true);
+  }
 
-	#[cfg(feature = "confirmation")]
-	{
-		use std::io::Write;
+  #[cfg(feature = "confirmation")]
+  {
+    use std::io::Write;
 
-		wprint!("{message} - [Y/n]: ");
-		std::io::stdout().flush()?;
+    wprint!("{message} - [Y/n]: ");
+    std::io::stdout().flush()?;
 
-		let choice = getch::Getch::new().getch().unwrap_or_default() as char;
+    let choice = getch::Getch::new().getch().unwrap_or_default() as char;
 
-		print!("\r\x1b[2K");
-		std::io::stdout().flush()?;
+    print!("\r\x1b[2K");
+    std::io::stdout().flush()?;
 
-		if choice == 'Y' || choice == 'y'
-		{
-			Ok(true)
-		}
-		else
-		{
-			Ok(false)
-		}
-	}
+    if choice == 'Y' || choice == 'y' {
+      Ok(true)
+    }
+    else {
+      Ok(false)
+    }
+  }
 }
-fn qcommand_resolve(key: &str) -> Option<&QuickCommand>
-{
-	QUICK_COMMAND_TABLE.get(key)
+fn qcommand_resolve(key: &str) -> Option<&QuickCommand> {
+  QUICK_COMMAND_TABLE.get(key)
 }
-fn qcommand_execute(cmd: &str, qcmd: &QuickCommand) -> Option<Result<i32, i32>>
-{
-	match (qcmd.callback)()
-	{
-		Ok(act) => match act
-		{
-			QuickCommandAction::Exit(code) =>
-			{
-				return Some(Ok(code));
-			}
-		},
-		Err(e) =>
-		{
-			let code = match e
-			{
-				QuickCommandError::IoError(e) =>
-				{
-					wprintln!("{cmd}: {e}");
-					e.raw_os_error().unwrap_or(1)
-				}
-				QuickCommandError::ExitedWithErrorCode(code) =>
-				{
-					wprintln!("{cmd}: Exited with error code {code}");
-					code
-				}
-			};
+fn qcommand_execute(cmd: &str, qcmd: &QuickCommand) -> Option<Result<i32, i32>> {
+  match (qcmd.callback)() {
+    Ok(act) => match act {
+      QuickCommandAction::Exit(code) => {
+        return Some(Ok(code));
+      }
+    },
+    Err(e) => {
+      let code = match e {
+        QuickCommandError::IoError(e) => {
+          wprintln!("{cmd}: {e}");
+          e.raw_os_error().unwrap_or(1)
+        }
+        QuickCommandError::ExitedWithErrorCode(code) => {
+          wprintln!("{cmd}: Exited with error code {code}");
+          code
+        }
+      };
 
-			return Some(Err(code));
-		}
-	}
+      return Some(Err(code));
+    }
+  }
 }
-fn qcommand_seq_check(seq: &str) -> Result<(), char>
-{
-	// FIXME: qcommand_seq_check_req(seq: &str, f: F(&[&QuickCommand, ...])) -> ...
+fn qcommand_seq_check(seq: &str) -> Result<(), char> {
+  // FIXME: qcommand_seq_check_req(seq: &str, f: F(&[&QuickCommand, ...])) -> ...
 
-	for ch in seq.chars()
-	{
-		let mut buf = [0u8; 4];
-		let cmd = ch.encode_utf8(&mut buf);
+  for ch in seq.chars() {
+    let mut buf = [0u8; 4];
+    let cmd = ch.encode_utf8(&mut buf);
 
-		if qcommand_resolve(cmd).is_none()
-		{
-			return Err(ch);
-		}
-	}
+    if qcommand_resolve(cmd).is_none() {
+      return Err(ch);
+    }
+  }
 
-	Ok(())
+  Ok(())
 }
-fn qcommand_execute_common(mut cmd: &str) -> Option<i32>
-{
-	if cmd.starts_with('+')
-	{
-		cmd = &cmd[1..];
-		if let Err(ch) = qcommand_seq_check(cmd)
-		{
-			wprintln!("Invalid quick command(s) in '{cmd}': {ch}");
-			return Some(1);
-		}
+fn qcommand_execute_common(mut cmd: &str) -> Option<i32> {
+  if cmd.starts_with('+') {
+    cmd = &cmd[1..];
+    if let Err(ch) = qcommand_seq_check(cmd) {
+      wprintln!("Invalid quick command(s) in '{cmd}': {ch}");
+      return Some(1);
+    }
 
-		let Ok(true) = qcommand_confirm(format_args!(
-			"do you want execute sequence command(s) `{cmd}`?"
-		))
-		else
-		{
-			wprintln!("Aborted");
-			return Some(0);
-		};
+    let Ok(true) = qcommand_confirm(format_args!(
+      "do you want execute sequence command(s) `{cmd}`?"
+    ))
+    else {
+      wprintln!("Aborted");
+      return Some(0);
+    };
 
-		for ch in cmd.chars()
-		{
-			let mut buf = [0u8; 4];
-			let cmd = ch.encode_utf8(&mut buf);
+    for ch in cmd.chars() {
+      let mut buf = [0u8; 4];
+      let cmd = ch.encode_utf8(&mut buf);
 
-			let Some(qcmd) = qcommand_resolve(cmd)
-			else
-			{
-				unreachable!();
-			};
+      let Some(qcmd) = qcommand_resolve(cmd)
+      else {
+        unreachable!();
+      };
 
-			match qcommand_execute(cmd, qcmd)
-			{
-				Some(Ok(_)) | None =>
-				{}
-				Some(Err(it)) => return Some(it),
-			}
-		}
+      match qcommand_execute(cmd, qcmd) {
+        Some(Ok(_)) | None => {}
+        Some(Err(it)) => return Some(it),
+      }
+    }
 
-		Some(0)
-	}
-	else
-	{
-		if let Some(qcmd) = qcommand_resolve(cmd)
-		{
-			let Ok(true) = qcommand_confirm(format_args!("do you want execute command `{cmd}`?"))
-			else
-			{
-				wprintln!("Aborted");
-				return Some(0);
-			};
+    Some(0)
+  }
+  else {
+    if let Some(qcmd) = qcommand_resolve(cmd) {
+      let Ok(true) = qcommand_confirm(format_args!("do you want execute command `{cmd}`?"))
+      else {
+        wprintln!("Aborted");
+        return Some(0);
+      };
 
-			return match qcommand_execute(cmd, qcmd)
-			{
-				Some(Ok(it)) => Some(it),
-				Some(Err(it)) => Some(it),
-				None => None,
-			};
-		}
+      return match qcommand_execute(cmd, qcmd) {
+        Some(Ok(it)) => Some(it),
+        Some(Err(it)) => Some(it),
+        None => None,
+      };
+    }
 
-		if cmd.len() <= 1
-		{
-			return None;
-		}
-		if qcommand_seq_check(cmd).is_err()
-		{
-			return None;
-		}
+    if cmd.len() <= 1 {
+      return None;
+    }
+    if qcommand_seq_check(cmd).is_err() {
+      return None;
+    }
 
-		use std::fmt::Write;
+    use std::fmt::Write;
 
-		let mut hint = String::with_capacity(cmd.len() * 3);
-		for ch in cmd.chars()
-		{
-			write!(hint, "{ch}, ").ok();
-		}
-		hint.truncate(hint.len().saturating_sub(2));
+    let mut hint = String::with_capacity(cmd.len() * 3);
+    for ch in cmd.chars() {
+      write!(hint, "{ch}, ").ok();
+    }
+    hint.truncate(hint.len().saturating_sub(2));
 
-		wprintln!(
-			"'{cmd}' is not a registered command; did you mean {hint}? use +{cmd} to run them in sequence."
-		);
+    wprintln!(
+      "'{cmd}' is not a registered command; did you mean {hint}? use +{cmd} to run them in sequence."
+    );
 
-		Some(1)
-	}
+    Some(1)
+  }
 }
 
-fn qcmd_help() -> QuickCommandCallbackResult
-{
-	use std::io::Write;
+fn qcmd_help() -> QuickCommandCallbackResult {
+  use std::io::Write;
 
-	let stdout = std::io::stdout();
-	let mut guard = stdout.lock();
+  let stdout = std::io::stdout();
+  let mut guard = stdout.lock();
 
-	writeln!(guard, "[Quick Commands]")?;
-	for (cmd, qcmd) in &QUICK_COMMAND_TABLE
-	{
-		writeln!(guard, "  {cmd}: {}", qcmd.description)?;
-	}
+  writeln!(guard, "[Quick Commands]")?;
+  for (cmd, qcmd) in &QUICK_COMMAND_TABLE {
+    writeln!(guard, "  {cmd}: {}", qcmd.description)?;
+  }
 
-	writeln!(guard)?;
+  writeln!(guard)?;
 
-	writeln!(guard, "[Positional Replacements]")?;
-	for (idx, tab) in &REPLACE_SEGMENT_TABLE
-	{
-		writeln!(guard, "> Index {idx}")?;
-		for (alias, replacement) in tab
-		{
-			writeln!(guard, "  {alias} -> {replacement}")?;
-		}
-		writeln!(guard)?;
-	}
+  writeln!(guard, "[Positional Replacements]")?;
+  for (idx, tab) in &REPLACE_SEGMENT_TABLE {
+    writeln!(guard, "> Index {idx}")?;
+    for (alias, replacement) in tab {
+      writeln!(guard, "  {alias} -> {replacement}")?;
+    }
+    writeln!(guard)?;
+  }
 
-	Ok(QuickCommandAction::Exit(0))
+  Ok(QuickCommandAction::Exit(0))
 }
-fn qcmd_setup() -> QuickCommandCallbackResult
-{
-	quick_command_execute_install!(backend_execute_common_checked; ["openssh", "busybox"]);
+fn qcmd_setup() -> QuickCommandCallbackResult {
+  quick_command_execute_install!(backend_execute_common_checked; ["openssh", "busybox"]);
 
-	Ok(QuickCommandAction::Exit(0))
+  Ok(QuickCommandAction::Exit(0))
 }
-fn qcmd_version() -> QuickCommandCallbackResult
-{
-	quick_command_execute!(backend_execute_common_checked; ["--version"]);
+fn qcmd_version() -> QuickCommandCallbackResult {
+  quick_command_execute!(backend_execute_common_checked; ["--version"]);
 
-	Ok(QuickCommandAction::Exit(0))
+  Ok(QuickCommandAction::Exit(0))
 }
-fn qcmd_fully_update() -> QuickCommandCallbackResult
-{
-	quick_command_execute!(backend_execute_common_checked; ["update"], ["upgrade", "-y"]);
+fn qcmd_fully_update() -> QuickCommandCallbackResult {
+  quick_command_execute!(backend_execute_common_checked; ["update"], ["upgrade", "-y"]);
 
-	Ok(QuickCommandAction::Exit(0))
+  Ok(QuickCommandAction::Exit(0))
 }
-fn qcmd_fully_cleanup() -> QuickCommandCallbackResult
-{
-	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"]);
+fn qcmd_fully_cleanup() -> QuickCommandCallbackResult {
+  quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"]);
 
-	Ok(QuickCommandAction::Exit(0))
+  Ok(QuickCommandAction::Exit(0))
 }
-fn qcmd_sync() -> QuickCommandCallbackResult
-{
-	quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"], ["update"], ["upgrade", "-y"]);
+fn qcmd_sync() -> QuickCommandCallbackResult {
+  quick_command_execute!(backend_execute_common_checked; ["autoclean"], ["autopurge"], ["update"], ["upgrade", "-y"]);
 
-	Ok(QuickCommandAction::Exit(0))
+  Ok(QuickCommandAction::Exit(0))
 }
 
-fn main()
-{
-	const {
-		assert!(MAX_QCOMMAND_SIZE > 0);
-	}
+fn main() {
+  const {
+    assert!(MAX_QCOMMAND_SIZE > 0);
+  }
 
-	let mut args = std::env::args().skip(1).peekable();
+  let mut args = std::env::args().skip(1).peekable();
 
-	if let Some(act) = args.peek()
-	{
-		// NOTE: Consider warning if necessary
-		if act.len() <= MAX_QCOMMAND_SIZE
-			&& let Some(code) = qcommand_execute_common(act)
-		{
-			std::process::exit(code);
-		}
-	}
+  if let Some(act) = args.peek() {
+    // NOTE: Consider warning if necessary
+    if act.len() <= MAX_QCOMMAND_SIZE
+      && let Some(code) = qcommand_execute_common(act)
+    {
+      std::process::exit(code);
+    }
+  }
 
-	let e = backend_execute_common(|cmd| {
-		cmd
-			.args(args.enumerate().map(|(idx, p)| {
-				match REPLACE_SEGMENT_TABLE.get(&idx).and_then(|tab| tab.get(&p))
-				{
-					Some(s) => Cow::Borrowed(OsStr::new(s)),
-					None => Cow::Owned(p.into()),
-				}
-			}))
-			.exec()
-	});
-	wprintln!("{e}");
+  let e = backend_execute_common(|cmd| {
+    cmd
+      .args(args.enumerate().map(|(idx, p)| {
+        match REPLACE_SEGMENT_TABLE.get(&idx).and_then(|tab| tab.get(&p)) {
+          Some(s) => Cow::Borrowed(OsStr::new(s)),
+          None => Cow::Owned(p.into()),
+        }
+      }))
+      .exec()
+  });
+  wprintln!("{e}");
 
-	std::process::exit(e.raw_os_error().unwrap_or(1));
+  std::process::exit(e.raw_os_error().unwrap_or(1));
 }
